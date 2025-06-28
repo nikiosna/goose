@@ -43,6 +43,16 @@ OUT_FILE="goose"
 GOOSE_BIN_DIR="${GOOSE_BIN_DIR:-"$HOME/.local/bin"}"
 RELEASE="${CANARY:-false}"
 CONFIGURE="${CONFIGURE:-true}"
+
+# Set a temporary directory for extraction
+TMP_DIR="/tmp/goose_install_$RANDOM"
+
+# Check for Termux environment and adjust variables
+if echo "${PREFIX:-}" | grep -q "com.termux"; then
+  TMP_DIR="$TMPDIR/goose_install_$RANDOM"
+  GOOSE_BIN_DIR="$PREFIX/bin"
+fi
+
 if [ -n "${GOOSE_VERSION:-}" ]; then
   # Validate the version format
   if [[ ! "$GOOSE_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
@@ -114,13 +124,12 @@ if ! curl -sLf "$DOWNLOAD_URL" --output "$FILE"; then
   exit 1
 fi
 
-# Create a temporary directory for extraction
-TMP_DIR="/tmp/goose_install_$RANDOM"
+# Create the temporary directory for extraction
 if ! mkdir -p "$TMP_DIR"; then
   echo "Error: Could not create temporary extraction directory"
   exit 1
 fi
-# Clean up temporary directory
+# Clean up temporary directory on exit
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "Extracting $FILE to temporary directory..."
@@ -216,6 +225,33 @@ else
     mv "$TMP_DIR/temporal" "$GOOSE_BIN_DIR/temporal"
     chmod +x "$GOOSE_BIN_DIR/temporal"
   fi
+fi
+
+# Apply termux-elf-cleaner if in Termux environment and tool is available
+if echo "${PREFIX:-}" | grep -q "com.termux" && command -v termux-elf-cleaner >/dev/null 2>&1; then
+  echo "Termux environment detected, applying termux-elf-cleaner to binaries..."
+  
+  # Clean the main goose binary
+  if [ -f "$GOOSE_BIN_DIR/$OUT_FILE" ]; then
+    echo "Cleaning $OUT_FILE with termux-elf-cleaner"
+    termux-elf-cleaner "$GOOSE_BIN_DIR/$OUT_FILE"
+  fi
+  
+  # Clean temporal-service if it exists
+  if [ -f "$GOOSE_BIN_DIR/temporal-service" ]; then
+    echo "Cleaning temporal-service with termux-elf-cleaner"
+    termux-elf-cleaner "$GOOSE_BIN_DIR/temporal-service"
+  fi
+  
+  # Clean temporal CLI if it exists
+  if [ -f "$GOOSE_BIN_DIR/temporal" ]; then
+    echo "Cleaning temporal CLI with termux-elf-cleaner"
+    termux-elf-cleaner "$GOOSE_BIN_DIR/temporal"
+  fi
+elif echo "${PREFIX:-}" | grep -q "com.termux" && ! command -v termux-elf-cleaner >/dev/null 2>&1; then
+  echo "Warning: Termux environment detected but termux-elf-cleaner not found."
+  echo "Consider installing it with: pkg install termux-elf-cleaner"
+  echo "This may be needed for proper binary execution on Android."
 fi
 
 # skip configuration for non-interactive installs e.g. automation, docker
